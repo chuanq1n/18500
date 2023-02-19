@@ -3,6 +3,9 @@ import cv2
 #   def __init__(self):
 #       pass
 
+#using cv2 dnn does not work due to some weird issues in the detect function
+# i tried looking into it online and it seems like it could be related
+# to openCV's compatibility with certain operating systems, 
 def main():
 
     net = cv2.dnn.readNetFromONNX('yolov5/yolov5s.onnx')

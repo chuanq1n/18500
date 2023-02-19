@@ -1,5 +1,5 @@
 
-#
+#used the following resources to setup yolov5s to process live video feed from camera
 #https://github.com/ultralytics/yolov5
 #https://www.youtube.com/watch?v=Cof7CNjDppo&t=640s
 import cv2
