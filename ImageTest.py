@@ -9,7 +9,7 @@ import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
 device = 'cpu'
-model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5s.onnx')
+model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5n.onnx')
 #model = torch.hub.load('ultralytics/yolov5', 'yolov5s') // using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
 def score_frame(frame):

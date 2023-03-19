@@ -21,7 +21,6 @@ def main():
             print("class ids", classIds)
             print("scores", scores)
             print("bboxes", bboxes)
-    
             cv2.imshow("Frame", frame)
             cv2.waitKey(1)
     return 0
