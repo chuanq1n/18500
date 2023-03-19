@@ -22,7 +22,7 @@ model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5n.onnx')
 #model = torch.hub.load('ultralytics/yolov5', 'yolov5s') // using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
 #goTurnTracker = cv2.TrackerGOTURN_create()
-deepSort = DeepSort(max_age=5,
+deepSort = DeepSort(max_age=10,
                    n_init=2,
                    nms_max_overlap=1.0,
                    embedder='mobilenet',
@@ -34,16 +34,33 @@ trackMap = {}
 #track track ids and direction
 dirMap = {} 
 #used to label entrance line of each door in format id : [(x1,y1), (x2,y2)]
-doors = {}
-#count for each room
-doorCounts = {}
 doorid = 0
+
+leftDoors = {}
+rightDoors = {}
+
+#init for testing given the current footage
+leftDoors[0] = [(233, 447), (239, 422)]
+leftDoors[1] = [(262, 398), (267, 387)]
+rightDoors[2] = [(406, 449), (393, 428)]
+rightDoors[3] = [(534, 635), (508, 590)]
+doorid = 4
+#init count for each room
+doorCounts = {}
+for i in range(4):
+    doorCounts[i] = 0
+
+#keeps track of tracks that have been counted to prevent double count
+inIds = []
+outIds = []
 
 #video frame dimension globals
 framex = 640
 framey = 640
 halfx = framex//2    
 halfy = framey//2
+
+tracks = []
 
 def score_frame(frame):
     dim = [frame]
@@ -89,41 +106,93 @@ def updateTrackMap(id, center):
             #print("dx, dy", slope[0], slope[1])
             
             if (slope[0] < (-1 * offset)):
-                dirMap[id] = "left"
+                dirMap[id] = 'L'
             elif (slope[0] > offset):
-                dirMap[id] = "right"
+                dirMap[id] = 'R'
+            else:
+                dirMap[id] = 'N'
             
     else:
         trackMap[id] = [center]
+        dirMap[id] = 'N'
     return None
 
 def selectDoors(event, x, y, flags, param):
     global doorid
+    global halfx
     if (event == cv2.EVENT_LBUTTONDOWN):
         print("down coord", x, y)
-        doors[doorid] = [(int(x),int(y))]
+        if (x < halfx):
+            leftDoors[doorid] = [(int(x), int(y))]
+        else:
+            rightDoors[doorid] = [(int(x), int(y))]
     elif (event == cv2.EVENT_LBUTTONUP):
         print("up coord", x, y)
-        doors[doorid].append((int(x),int(y)))
+        if (x < halfx):
+            leftDoors[doorid].append((int(x), int(y)))
+        else:
+            rightDoors[doorid].append((int(x), int(y)))
+        doorCounts[doorid] = 0
         doorid += 1
 
+#coords is the coordinates of the bounding box, ndarray of shape (4,): x1, y1, x2, y2
 def checkCrossDoor(track_id, center, coords):
     global halfx # this is the middle of the frame
     global doorid # highest doorid
     global doorCounts #map containing doorid and corresponding counts
-    global doors #coordinates of doors
+    global leftDoors #coordinates of doors, index 0 is bottom coord, index 1 is top coord
+    global rightDoors
     '''
     case 1: center left of middle line
     case 2: center right of middle line
     '''
+    #if (track_id in inIds):
+        #print("track id already counted", track_id)
+        #return 0
+    x1, y1, x2, y2 = coords
+    if (center[0] < halfx):
+        #case 1
+        for id in leftDoors.keys():
+            pt0, pt1 = leftDoors[id]
+            # if bottom left corner passes the line defining the door
+            if pt1[1] <= y2 and y2 <= pt0[1]: #bottom y coordinate in range of door y coords, pt1 is lower y val bound, pt0 is higher y val bound
+                # line below needs work?
+                # if bottom left of bbox crosses bottom left door corner X and moving left
+                if (x1 <= pt0[0]):
+                    if (track_id not in inIds and dirMap[track_id] == 'L'):
+                        doorCounts[id] += 1
+                        print(f'leftdoor:{id} increased count to {doorCounts[id]}')
+                        # add id to counted ids
+                        inIds.append(track_id)
+                        print("in ids", inIds)
+                    elif (track_id not in outIds and dirMap[track_id] == 'N'):
+                        doorCounts[id] -= 1
+                        print(f'leftdoor:{id} decerased count to {doorCounts[id]}')
+                        outIds.append(track_id)
+                        print("out ids", outIds)
+    else:
+        #case 2
+        for id in rightDoors.keys():
+            pt0, pt1 = rightDoors[id]
+            if pt1[1] <= y2 and y2 <= pt0[1]: #bottom y coordinate in range of door y coords
+                if (pt0[0] <= x2):
+                    if (track_id not in inIds and dirMap[track_id] == 'R'):
+                        doorCounts[id] += 1
+                        print(f'rightdoor:{id} increased count to {doorCounts[id]}')
+                        inIds.append(track_id)
+                        print("in ids", inIds)
+                    elif (track_id not in outIds and dirMap[track_id] == 'N'):
+                        doorCounts[id] -= 1
+                        print(f'rightdoor:{id} decreased count to {doorCounts[id]}')
+                        outIds.append(track_id)
+                        print("out ids", inIds)
     return 0
 
 def main():
     #videoInput = cv2.VideoCapture(0)
-    path = '/Users/bli/Desktop/500/CV/test2.mp4'
+    path = '/Users/bli/Desktop/500/CV/trimmedtest2.mp4'
     videoInput = cv2.VideoCapture(path)
 
-    
     try:
         while True:
             ret, frame = videoInput.read()
@@ -144,7 +213,7 @@ def main():
                     bbox = ltrb
                     center = np.array([(bbox[2] + bbox[0])/2, (bbox[3] + bbox[1])/2])
                     coords = np.array(bbox)
-                    #print(coords)
+                    #print("coords", coords)
                     #print("point", point)
                     # update map containing each track and the centerpoint in past 10 frames 
                     updateTrackMap(track_id, center)
@@ -163,9 +232,15 @@ def main():
                 fps = 1/np.round(endTime - startTime, 2)
                 cv2.putText(f, f'FPS:{int(fps)}', (20,70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
                 # draw doors
-                for id in doors.keys():
-                    coords = doors[id]
+                for id in leftDoors.keys():
+                    coords = leftDoors[id]
+
                     cv2.line(f, coords[0], coords[1], (213, 255, 52), 1)
+                    
+                for id1 in rightDoors.keys():
+                    coords1 = rightDoors[id1]
+
+                    cv2.line(f, coords1[0], coords1[1], (213, 255, 52), 1)
 
                 cv2.imshow('test', f)
                 cv2.setMouseCallback('test', selectDoors)
