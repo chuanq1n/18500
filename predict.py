@@ -16,8 +16,8 @@ def importdata():
 def splitdataset(model_data):
   
     # Separating the target variable
-    X = model_data.values[:, 0:7]
-    Y = model_data.values[:, 7]
+    X = model_data.values[:, 0:5]
+    Y = model_data.values[:, 8]
   
     # Splitting the dataset into train and test
     X_train, X_test, y_train, y_test = train_test_split( 
